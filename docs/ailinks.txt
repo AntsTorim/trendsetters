@@ -1,0 +1,2 @@
+Partial Observable Markov Decision Process 
+ You first run an abstraction algorithm that generates a smaller, but strategically similar, game so that we can then use an equilibrium-finding algorithm that finds a Nash equilibrium or an approximate Nash equilibrium for the smaller game. The original game (in this case, heads-up no-limit hold’em) is far too large to solve for Nash equilibrium. So we solve the smaller, abstract game, and then we use a reverse-mapping algorithm to map the answer from the abstract game back to the original game.”

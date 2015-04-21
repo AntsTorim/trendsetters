@@ -31,12 +31,29 @@ class Game:
         self.initdecks()
         self.playerfunds = [startfunds] * self.players
         self.currentphase = AuctionPhase(self)
-        
+        self.winamount = c + c // 2 + 1
+                
     def emptyboard(self):
         """
         Creates empty board
         """
         raise NotImplementedError
+    
+    def set(self, r, c, val=1):
+        """
+        Sets r, c to val on board
+        """
+        raise NotImplementedError
+        
+    def colfreqs(self):
+        """
+        Column frequencies
+        """
+        raise NotImplementedError
+        
+    def rowweights(self):
+        raise NotImplementedError
+
         
     def initdecks(self):
         self.areadeck = list(range(self.areas+1)) * self.c
@@ -55,9 +72,18 @@ class Game:
         else:
             return player + (area-1) * self.players + 1
     
+    def rowinfo(self, row):
+        """
+        Returns (player, area) tuple
+        """
+        if row == 0:
+            return (None, 0)
+        else:
+            return ((row-1) % (self.players), 1 + (row-1) // self.players)
+    
     def setforplayer(self, player, area, c, val=1):
         """
-        Sets ability c for the player in area
+        Sets ability c for the player in area(1...3)
         """
         self.set(self.find_row(player, area), c, val)
    
@@ -115,18 +141,57 @@ class Game:
         r = self.find_row(player, area)
         return self.board[r][ability]
 
-
     def nextphase(self):
         """
         Move to next phase. Current should be inactive.
+        Game should have no winner yet.
         """
         assert not self.currentphase.active
+        assert not self.winner()
         if self.currentphase.type == "auction":
             self.currentphase = PaydayPhase(self)
         elif self.currentphase.type == "payday":
             self.auctionstarter = (self.auctionstarter + 1) % self.players
             self.currentphase = AuctionPhase(self)
-    
+        
+    def winner(self):
+        """
+        If game has ended returns the winner, else None
+        """
+        max_weight = -1
+        max_player = None
+        for i in range(len(self.rowweights())):
+            w = self.rowweights()[i]
+            if w > max_weight:
+                max_weight = w
+                max_player = i
+        if max_weight >= self.winamount:
+            return max_player
+        else:
+            return None
+        
+    def __repr__(self):
+        # Build board description
+        board_desc = ".  ".join([str(x) for x in range(self.c)])
+        board_desc = "   \t[ " + board_desc +  ".]\n\n"
+        row_template = "{0}:\t{1}    {2}  \n"
+        board_desc += row_template.format("K", self.board[0],
+                                          self.rowweights()[0])
+        for i in range(1, len(self.board)):
+            player, _ = self.rowinfo(i)
+            board_desc += row_template.format(player, self.board[i],
+                                              self.rowweights()[i])
+        board_desc += "\nC:\t" + str(self.colfreqs()) + "\n"
+        
+        # Build monetary description
+        money_desc = ""
+        money_list = [str(i) + ": " + str(self.playerfunds[i]) + "$"
+            for i in range(self.players)]
+        money_desc = ", ".join(money_list)
+        
+        return "Game\n{0}\n{1} \n\nPhase:  {2}".format(board_desc,
+            money_desc, repr(self.currentphase))
+        
         
 class AuctionPhase:
     """
@@ -146,7 +211,9 @@ class AuctionPhase:
         self.highest_bidder = None
         self.active = True # If phase is active
         self.item = game.hiddenability()
+        self.area = game.hiddenarea()
         self.type = "auction"
+        self.steps = [AuctionStep(self.activeplayer)] # step history
 
 
 # ---------- Player methods --------------------------------
@@ -161,6 +228,7 @@ class AuctionPhase:
         assert self.can_check()
         self.deduct(self.CHECK_COST)
         self.checked.append(self.activeplayer)
+        self.steps[-1].checked = True
         return self.game.hiddenarea()
         
     def can_hide(self):
@@ -170,16 +238,19 @@ class AuctionPhase:
         assert self.can_hide()
         self.deduct(self.HIDE_COST)
         self.hidden = True 
+        self.steps[-1].hid = True
       
     def bid(self, bidsum):
         assert self.playerfunds() >= bidsum
-        assert bidsum > (self.highest_bid + self.BIDDING_STEP)
+        assert bidsum >= (self.highest_bid + self.BIDDING_STEP)
         self.deduct(bidsum)
         self.highest_bid = bidsum
         self.highest_bidder = self.activeplayer
+        self.steps[-1].bid = bidsum
         self.nextplayer()
         
     def pass_bid(self):
+        self.steps[-1].bid = None
         self.nextplayer()
 
  # -------------- Internal methods ------------------------------------
@@ -199,13 +270,80 @@ class AuctionPhase:
         if self.activeplayer == self.game.auctionstarter:
             # Phase ends
             self.finalize()
+        else:
+            self.steps.append(AuctionStep(self.activeplayer))
 
     def finalize(self):
          self.active = False
+         self.winner = self.highest_bidder
          self.game.setforplayer(self.highest_bidder, 
                                 self.game.poparea(),
                                 self.game.popability())
-         
+                                
+    def __repr__(self):
+        if self.active:
+            activity_desc = "active"
+        else:
+            activity_desc = "inactive"
+        if self.hidden:
+            activity_desc += "/hidden"
+        steps_desc = "\n\t".join([repr(x) for x in self.steps])
+        if self.winner == None:
+            player_desc = "active: " + str(self.activeplayer)
+        else:
+            player_desc = "winner: " + str(self.winner) + \
+                ". For area " + str(self.area) + "."
+        if self.activeplayer in self.checked:
+            player_desc += ", checked area " + str(self.area)
+        result = """Auction is {0}. For sale: {1}. Highest bid is {2}$.
+        Player, {3}
+        Steps: 
+        {4}
+        
+         """.format(activity_desc, str(self.item), self.highest_bid,
+                    player_desc, steps_desc)
+        return result
+
+
+
+class AuctionStep:
+    """
+    Data structure with overriden fieldwise equality:
+    player
+    checked (True / False)
+    hid (True / False)
+    bid (None if passed)
+    """
+    
+    
+    def __init__(self, player, checked=False, hid=False, bid=None):
+        self.player = player
+        self.checked = checked
+        self.hid = hid
+        self.bid = bid      
+      
+    def __eq__(self,other):
+        return self.__dict__ == other.__dict__
+        
+    def __ne__(self, other):
+        return not self == other
+    
+    def __repr__(self):
+        if self.checked:
+            checked_desc = "checked, "
+        else:
+            checked_desc = ""
+        if self.hid:
+            hid_desc = "hid,"
+        else:
+            hid_desc = ""
+        result = "Player {0}, {1}{2} bid: {3}".format(self.player,
+                                               checked_desc,
+                                               hid_desc,
+                                               self.bid)
+        return result
+        
+            
 
 class PaydayPhase:
     
@@ -215,6 +353,10 @@ class PaydayPhase:
         self.PAY = 2000
         game.playerfunds = [x + self.PAY for x in game.playerfunds]
         self.active = False
+
+    def __repr__(self): return "Payday\n"
+    
+    
 
 if __name__ == "__main__":
     pass

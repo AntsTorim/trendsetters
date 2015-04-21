@@ -20,6 +20,24 @@ class NumGame(Game):
     def rowweights(self):
         substituted = self.board * self.colfreqs()
         return np.dot(substituted, np.ones(self.c))
-        
+
+
+if __name__ == "__main__":
+    ng = NumGame(2)
+    print(repr(ng))
+    ng.currentphase.bid(1000)    
+    print(repr(ng))
+    ng.currentphase.pass_bid()    
+    print(repr(ng))
+    ng.nextphase()
+    print(repr(ng))
+    ng.nextphase()
+    print(repr(ng))
+    ng.currentphase.check()    
+    print(repr(ng))
+    ng.currentphase.hide()  
+    print(repr(ng))
+    ng.currentphase.pass_bid()
+    print(repr(ng))
 
 
