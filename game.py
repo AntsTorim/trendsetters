@@ -11,6 +11,12 @@ import random
 class Game:
     """
     Entire game, from start to end
+    
+    Supports iteration:
+    for phase, player in game:
+       ...
+    or 
+    phase, player = next(game)
     """    
     
     
@@ -32,7 +38,25 @@ class Game:
         self.playerfunds = [startfunds] * self.players
         self.currentphase = AuctionPhase(self)
         self.winamount = c + c // 2 + 1
+    
+
+    def __iter__(self):
+        """
+        Generator that yields (phase, player) tuples until game ends. 
+        Player actions should be carried out on those phases.
+        Previous phases are finalized with default actions, if needed.
+        """
+        while self.winner() == None:
+            phase = self.currentphase 
+            player = self.currentphase.activeplayer
+            yield phase, player
+            phase.finalize_for(player)
+            if not phase.active and not self.winner():
+                self.nextphase()
                 
+            
+                
+            
     def emptyboard(self):
         """
         Creates empty board
@@ -120,7 +144,7 @@ class Game:
         result = self.abilitydeck[0]
         del self.abilitydeck[0]
         return result
-        
+              
     def buy(self, player):
         """
         Tries to give hidden ability to players band in hidden area,
@@ -166,6 +190,8 @@ class Game:
                 max_weight = w
                 max_player = i
         if max_weight >= self.winamount:
+            return max_player
+        elif len(self.abilitydeck)==0 or len(self.areadeck)==0:
             return max_player
         else:
             return None
@@ -243,7 +269,7 @@ class AuctionPhase:
     def bid(self, bidsum):
         assert self.playerfunds() >= bidsum
         assert bidsum >= (self.highest_bid + self.BIDDING_STEP)
-        self.deduct(bidsum)
+        #self.deduct(bidsum)
         self.highest_bid = bidsum
         self.highest_bidder = self.activeplayer
         self.steps[-1].bid = bidsum
@@ -253,13 +279,20 @@ class AuctionPhase:
         self.steps[-1].bid = None
         self.nextplayer()
 
+    def finalize_for(self, player):
+        "If player is activeplayer then pass bid, and move to next player"
+        if player == self.activeplayer:
+            self.pass_bid()
+        
  # -------------- Internal methods ------------------------------------
        
     def playerfunds(self):
         return self.game.playerfunds[self.activeplayer]
 
-    def deduct(self, amount):
-        self.game.playerfunds[self.activeplayer] -= amount
+    def deduct(self, amount, player=None):
+        if player == None:
+            player = self.activeplayer
+        self.game.playerfunds[player] -= amount
 
      
     def nextplayer(self):
@@ -276,9 +309,11 @@ class AuctionPhase:
     def finalize(self):
          self.active = False
          self.winner = self.highest_bidder
-         self.game.setforplayer(self.highest_bidder, 
-                                self.game.poparea(),
-                                self.game.popability())
+         area = self.game.poparea()
+         ability = self.game.popability()
+         if self.highest_bidder != None:
+             self.deduct(self.highest_bid, self.highest_bidder)
+             self.game.setforplayer(self.highest_bidder, area, ability)
                                 
     def __repr__(self):
         if self.active:
@@ -348,11 +383,14 @@ class AuctionStep:
 class PaydayPhase:
     
     def __init__(self, game):
+        self.activeplayer = None
         self.game = game
         self.type = "payday"
         self.PAY = 2000
         game.playerfunds = [x + self.PAY for x in game.playerfunds]
         self.active = False
+        
+    def finalize_for(self, player): pass
 
     def __repr__(self): return "Payday\n"
     

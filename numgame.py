@@ -4,8 +4,7 @@ import numpy as np
 from game import *
 
 class NumGame(Game):
-
-       
+ 
 
     def emptyboard(self):
         self.board = np.zeros((self.r, self.c))
@@ -13,7 +12,6 @@ class NumGame(Game):
     def set(self, r, c, val=1):
         self.board[r, c] = val
    
- 
     def colfreqs(self):
         return np.dot(np.ones(self.r), self.board) + self.board[0]
         

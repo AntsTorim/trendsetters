@@ -26,7 +26,6 @@ class TestGame(unittest.TestCase):
         self.assertEqual(ng.colfreqs().tolist(), [2, 1, 0, 2, 0])
         self.assertEqual(ng.rowweights().tolist(), [2, 3, 2, 0])
 
-
     def test_cards(self):
         areaselection = set()
         abilityselection = set()
@@ -87,7 +86,17 @@ class TestGame(unittest.TestCase):
         self.assertEqual(endgame.winner(), None)
         endgame.setforplayer(1, 3, 3)
         self.assertEqual(endgame.winner(), 0)
-        
+       
+    def test_iter(self):
+        oldphase = None
+        phasetypes = set()
+        for phase, player in self.ng:
+            phasetypes.add(phase.type)
+            if oldphase != None:
+                self.assertFalse(oldphase.active)
+            oldphase = phase
+        self.assertEqual(len(phasetypes), 2)
+             
 
 
 class TestAuctionPhase(unittest.TestCase):
@@ -125,7 +134,7 @@ class TestAuctionPhase(unittest.TestCase):
         self.assertEquals(self.phase.highest_bid, 0)
         self.phase.bid(1700)
         funds3 = self.ng.playerfunds[0]
-        self.assertEqual(funds3, funds2 - 1700)
+        self.assertEqual(funds3, funds2)
         self.assertEqual(self.phase.highest_bid, 1700)
         self.assertEqual(self.phase.highest_bidder, 0)
         self.assertEqual(self.phase.activeplayer, 1)
@@ -162,7 +171,9 @@ class TestAuctionPhase(unittest.TestCase):
                                             checked=False,
                                             hid=False,
                                             bid=3000))
-         
+        #Check player funds
+        self.assertEqual(self.phase.highest_bidder, 2)                                    
+        self.assertEqual(self.ng.playerfunds, [funds2, funds0, funds0-3000])                                    
         #Check phase changes
         self.ng.nextphase()
         self.assertEqual(self.ng.currentphase.type, "payday")
